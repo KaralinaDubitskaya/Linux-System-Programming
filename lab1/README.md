@@ -6,7 +6,7 @@ as the first argument of the command line). The console displays the total numbe
 
 1. The script must have the execute permission.                                              
                                                                                               
-    To view the permissions, use:                                                 
+   To view the permissions, use:                                                 
 <pre>
      > ls -l lab1.sh
 </pre>
