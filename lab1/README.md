@@ -1,6 +1,6 @@
 # The basic commands of the Unix OS
 
-This script uses the**for** loop, outputting to the console the sizes and permissions for all files
+This script uses the **for** loop, outputting to the console the sizes and permissions for all files
 in the specified directory and all its subdirectories (the directory name is specified by the user
 as the first argument of the command line). The console displays the total number of files scanned.
 
@@ -15,5 +15,5 @@ Allowing everyone to execute the script, enter:
 ```
 2. To execute the script, enter:
 ```
-> ./lab1.sh *directory_name*
+> ./lab1.sh *directory\_name*
 ```
