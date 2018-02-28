@@ -5,7 +5,7 @@ in the specified directory and all its subdirectories (the directory name is spe
 as the first argument of the command line). The console displays the total number of files scanned.
 
 1. The script must have the execute permission.                                              
-                                                                                              
+                                                                                                                                                                                                
    To view the permissions, use:                                                 
 <pre>
      > ls -l lab1.sh
