@@ -13,9 +13,8 @@ as the first argument of the command line). The console displays the total numbe
 ```
     > chmod +x lab1.sh
 ```
-<pre>
+
 2. To execute the script, enter:
-```
-    > ./lab1.sh <b>directory_name</b>
-```
+<pre>
+    > ./lab1.sh <i>directory_name</i>
 </pre>
