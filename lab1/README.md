@@ -9,7 +9,7 @@ as the first argument of the command line). The console displays the total numbe
     To view the permissions, use:                                                 
 <pre>
      > ls -l lab1.sh
-</pre>     
+</pre>
     Allowing everyone to execute the script, enter:
 <pre>
      > chmod +x lab1.sh
