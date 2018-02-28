@@ -11,7 +11,7 @@ as the first argument of the command line). The console displays the total numbe
      > ls -l lab1.sh
 </pre>
                                                                                             
-    Allowing everyone to execute the script, enter:
+   Allowing everyone to execute the script, enter:
 <pre>
      > chmod +x lab1.sh
 </pre>
