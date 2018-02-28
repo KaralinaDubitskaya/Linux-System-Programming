@@ -10,7 +10,7 @@ BSUIR, Software for Information Technologies, gr. 651001, 2018.
 1. The basic commands of the Unix OS.
 2. Files and directories of the Unix OS.
 
-## Contact
-Karalina Dubitskaya
-karalinadubitskaya@gmail.com
+## Contact                                     
+Karalina Dubitskaya                                                  
+karalinadubitskaya@gmail.com                                              
 Karolina.D100899@gmail.com
