@@ -3,7 +3,9 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 
+int calc_dir_size(char *dir_name, char *program_name);
 void print_error(const char *program_name, const char *error_message);
 
 int main(int argc, char *argv[])
@@ -24,11 +26,45 @@ int main(int argc, char *argv[])
     struct stat root_dir_stat;
     if (lstat(argv[1], &root_dir_stat) == -1)
     {
-        print_error(program_name, strerror(errno));
+        char *error_message = "lstat: ";
+        strcat(error_message, strerror(errno));
+        print_error(program_name, error_message);
         return 1;
     }
 
+    check_dir();
+
     return 0;
+}
+
+int calc_dir_size(char *dir_name, char *program_name)
+{
+    DIR *dir_pointer = NULL;
+    struct dirent *dir_entry;
+
+    dir_pointer = opendir(dir_name);
+    if (dir_pointer == NULL)
+    {
+        strcat(dir_name, ": ");
+        strcat(dir_name, strerror(errno));
+        print_error(program_name, dir_name);
+        return 1;
+    }
+
+    // The readdir() function returns a pointer to a dir_entry representing
+    // the next directory entry in the directory stream pointed to by
+    // dir_pointer. It returns NULL on reaching the end of the directory stream.
+    while ((dir_entry = readdir(dir_pointer)))
+    {
+        // Skip current and parent directories.
+        if ((strcmp(dir_entry->d_name, ".") == 0) ||
+            (strcmp(dir_entry->d_name, "..") == 0))
+        {
+            continue;
+        }
+
+        
+    }
 }
 
 void print_error(const char *program_name, const char *error_message)
