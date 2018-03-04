@@ -8,19 +8,31 @@
 #include <stdlib.h>
 #include <libgen.h>
 
+#define ERR_LOG_PATH "/tmp/err.log"
+
 int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat, long long *block_count_pointer,
-                   long long *size_pointer, ino_t *visited_inodes, int *vst_ind_len_pointer, const int BLOCK_SIZE);
-void print_error(const char *program_name, const char *directory, const char *error_message);
+                   long long *size_pointer, FILE *err_log, ino_t *visited_inodes, int *vst_ind_len_pointer, const int BLOCK_SIZE);
+void save_error_to_log(FILE *err_log, const char *program_name, const char *directory, const char *error_message);
+void print_error_log(FILE *err_log);
 
 int main(int argc, char *argv[])
 {
     // Used to display error messages.
     char *program_name = basename(argv[0]);
 
+    // Create temporary file to save error messages.
+    FILE *err_log = NULL;
+    if ((err_log = fopen(ERR_LOG_PATH ,"w+")) == NULL)
+    {
+        fprintf(stderr, "%s: Unable create error log (%s)\n", program_name, ERR_LOG_PATH);
+        return 1;
+    }
+
     // Check input.
     if (argc != 2)
     {
-        print_error(program_name, "Wrong number of parameters. Usage", "./lab2.exe \"path_name\"");
+        save_error_to_log(err_log, program_name, "Wrong number of parameters. Usage", "./lab2.exe \"path_name\"");
+        print_error_log(err_log);
         return 1;
     }
 
@@ -30,7 +42,8 @@ int main(int argc, char *argv[])
     struct stat root_dir_stat;
     if (lstat(argv[1], &root_dir_stat) == -1)
     {
-        print_error(program_name, argv[1], strerror(errno));
+        save_error_to_log(err_log, program_name, argv[1], strerror(errno));
+        print_error_log(err_log);
         return 1;
     }
 
@@ -41,7 +54,7 @@ int main(int argc, char *argv[])
     const int BLOCK_SIZE = 512;   // The st_blocks indicates the number of blocks allocated to the file, 512-byte units.
 
     // Recursively check info about directory (argv[1] - path name).
-    calc_dir_size(argv[1], program_name, root_dir_stat, &block_count, &size, visited_inodes, &vst_ind_len, BLOCK_SIZE);
+    calc_dir_size(argv[1], program_name, root_dir_stat, &block_count, &size, err_log, visited_inodes, &vst_ind_len, BLOCK_SIZE);
 
     if (block_count != 0)
     {
@@ -53,6 +66,9 @@ int main(int argc, char *argv[])
         fprintf(stdout, "Empty directory.\n");
     }
 
+    // Print error messages from err_log to stderr.
+    print_error_log(err_log);
+
     return 0;
 }
 
@@ -60,7 +76,7 @@ int main(int argc, char *argv[])
 // occupied by the files on the disk in bytes and the total size of the files.
 // Calculate the disk usage rate in %.
 int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
-                  long long *block_count_pointer, long long *size_pointer,
+                  long long *block_count_pointer, long long *size_pointer, FILE *err_log,
                   ino_t *visited_inodes, int *vst_ind_len_pointer, const int BLOCK_SIZE)
 {
     DIR *dir_pointer = NULL;
@@ -69,7 +85,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
     dir_pointer = opendir(dir_name);
     if (dir_pointer == NULL)
     {
-        print_error(program_name, dir_name, strerror(errno));
+        save_error_to_log(err_log, program_name, dir_name, strerror(errno));
         return 1;
     }
 
@@ -96,7 +112,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
         struct stat dir_entry_info;
         if (lstat(entry_path, &dir_entry_info))
         {
-            print_error(program_name, entry_path, strerror(errno));
+            save_error_to_log(err_log, program_name, entry_path, strerror(errno));
         }
 
         // The file is a directory.
@@ -107,7 +123,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
 
             // Recursively calculate for each entry of the directory.
             calc_dir_size(entry_path, program_name, root_dir_stat, &dir_block_count,
-                          &dir_size, visited_inodes, vst_ind_len_pointer, BLOCK_SIZE);
+                          &dir_size, err_log, visited_inodes, vst_ind_len_pointer, BLOCK_SIZE);
 
             if (dir_block_count != 0)
             {
@@ -148,7 +164,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
                 {
                     if ((visited_inodes = (ino_t *) realloc(visited_inodes, ((*vst_ind_len_pointer) + 1) * sizeof(ino_t))) == NULL)
                     {
-                        print_error(program_name, entry_path, strerror(errno));
+                        save_error_to_log(err_log, program_name, entry_path, strerror(errno));
                     }
                     else
                     {
@@ -180,7 +196,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
 
             if (readlink(entry_path, link, PATH_MAX) == -1)
             {
-                print_error(program_name, entry_path, strerror(errno));
+                save_error_to_log(err_log, program_name, entry_path, strerror(errno));
             }
             else
             {
@@ -204,14 +220,32 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
 
     if (closedir(dir_pointer) == -1)
     {
-        print_error(program_name, dir_name, strerror(errno));
+        save_error_to_log(err_log, program_name, dir_name, strerror(errno));
         return 1;
     }
 
     return 0;
 }
 
-void print_error(const char *program_name, const char *directory, const char *error_message)
+// Print error message to temporary file err_log. 
+void save_error_to_log(FILE *err_log, const char *program_name, const char *directory, const char *error_message)
 {
-    fprintf(stderr, "%s: %s: %s\n", program_name, directory, error_message);
+    fprintf(err_log, "%s: %s: %s\n", program_name, directory, error_message);
 };
+
+// Print all error messages to stream stderr from temporary file err_log and remove the file.
+void print_error_log(FILE *err_log)
+{
+    fseek(err_log, 0, SEEK_SET);
+
+    int ch = fgetc(err_log);
+    while (ch != EOF)
+    {
+        fputc(ch, stderr);
+        ch = fgetc(err_log);
+    }
+
+    fclose(err_log);
+
+    remove(ERR_LOG_PATH);
+}
