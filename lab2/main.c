@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 
     if (block_count != 0)
     {
-        fprintf(stdout, "Size: %lld \nSize on disk: %lld \nDisk usage rate: %f%%\n", size,
+        fprintf(stdout, "Size: %lld \nSize on disk: %lld \nDisk usage rate: %.2f%%\n", size,
                 block_count * BLOCK_SIZE, ((float) (size * 100) / (float) (block_count * BLOCK_SIZE)));
     }
     else
@@ -101,19 +101,24 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
 
         // The file is a directory.
         if (S_ISDIR(dir_entry_info.st_mode))
-            {
-            // Recursively calculate for each entry of the directory.
-            calc_dir_size(entry_path, program_name, root_dir_stat, block_count_pointer,
-                          size_pointer, visited_inodes, vst_ind_len_pointer, BLOCK_SIZE);
+        {
+            long long dir_block_count = 0;    // Number of blocks in the directory.
+            long long dir_size = 0;           // Size in bytes of the directory.
 
-            if (block_count_pointer != 0)
+            // Recursively calculate for each entry of the directory.
+            calc_dir_size(entry_path, program_name, root_dir_stat, &dir_block_count,
+                          &dir_size, visited_inodes, vst_ind_len_pointer, BLOCK_SIZE);
+
+            if (dir_block_count != 0)
             {
-                fprintf(stdout, "%s: Disk usage rate %.2f%%.\n", entry_path,
-                        ((float) ((*size_pointer) * 100) / (float) ((*block_count_pointer) * BLOCK_SIZE)));
+                (*size_pointer) += dir_size;
+                (*block_count_pointer += dir_block_count);
+                fprintf(stdout, "%s: Disk usage rate %.2f%%\n", entry_path,
+                        ((float) (dir_size * 100) / (float) (dir_block_count * BLOCK_SIZE)));
             }
             else
             {
-                fprintf(stdout, "Empty directory.\n");
+                fprintf(stdout, "%s: Empty directory\n", entry_path);
             }
 
             continue;
