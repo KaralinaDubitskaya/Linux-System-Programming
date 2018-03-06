@@ -10,8 +10,11 @@
 
 #define ERR_LOG_PATH "/tmp/err.log"
 
+ino_t *visited_inodes = NULL; // Array contains inodes of visited files.
+int vst_ind_len = 0;          // Length of the array of visited inodes (the previous line).
+
 int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat, long long *block_count_pointer,
-                   long long *size_pointer, FILE *err_log, ino_t *visited_inodes, int *vst_ind_len_pointer, const int BLOCK_SIZE);
+                   long long *size_pointer, FILE *err_log, const int BLOCK_SIZE);
 void save_error_to_log(FILE *err_log, const char *program_name, const char *directory, const char *error_message);
 void print_error_log(FILE *err_log);
 
@@ -49,12 +52,15 @@ int main(int argc, char *argv[])
 
     long long block_count = 0;    // Number of blocks.
     long long size = 0;           // Size in bytes.
-    ino_t *visited_inodes = NULL; // Array contains inodes of visited files.
-    int vst_ind_len = 0;          // Length of the array of visited inodes (the previous line).
     const int BLOCK_SIZE = 512;   // The st_blocks indicates the number of blocks allocated to the file, 512-byte units.
 
-    // Recursively check info about directory (argv[1] - path name).
-    calc_dir_size(argv[1], program_name, root_dir_stat, &block_count, &size, err_log, visited_inodes, &vst_ind_len, BLOCK_SIZE);
+    // Get absolete path name of the directory.
+    char max_path_len[PATH_MAX + 1];
+    char *path;
+    path = realpath(argv[1], max_path_len);
+
+    // Recursively check info about the directory.
+    calc_dir_size(path, program_name, root_dir_stat, &block_count, &size, err_log, BLOCK_SIZE);
 
     if (block_count != 0)
     {
@@ -76,8 +82,7 @@ int main(int argc, char *argv[])
 // occupied by the files on the disk in bytes and the total size of the files.
 // Calculate the disk usage rate in %.
 int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
-                  long long *block_count_pointer, long long *size_pointer, FILE *err_log,
-                  ino_t *visited_inodes, int *vst_ind_len_pointer, const int BLOCK_SIZE)
+                  long long *block_count_pointer, long long *size_pointer, FILE *err_log, const int BLOCK_SIZE)
 {
     DIR *dir_pointer = NULL;
     struct dirent *dir_entry;
@@ -104,9 +109,9 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
         // Get full pathname of the entry.
         char *entry_path = malloc(strlen(dir_name) + strlen(dir_entry->d_name) + 2);
         strcpy(entry_path, dir_name);
-        strcat(entry_path, "/");
+        if (entry_path[strlen(dir_name) - 1] != '/') {
+            strcat(entry_path, "/"); }
         strcat(entry_path, dir_entry->d_name);
-
 
         // Contains main info about the entry.
         struct stat dir_entry_info;
@@ -116,32 +121,85 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
         }
 
         // The file is a directory.
-        if (S_ISDIR(dir_entry_info.st_mode))
+        if (S_ISDIR(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
         {
-            long long dir_block_count = 0;    // Number of blocks in the directory.
-            long long dir_size = 0;           // Size in bytes of the directory.
-
-            // Recursively calculate for each entry of the directory.
-            calc_dir_size(entry_path, program_name, root_dir_stat, &dir_block_count,
-                          &dir_size, err_log, visited_inodes, vst_ind_len_pointer, BLOCK_SIZE);
-
-            if (dir_block_count != 0)
+            // Multiple hard links
+            if ((int) dir_entry_info.st_nlink > 1)
             {
-                (*size_pointer) += dir_size;
-                (*block_count_pointer += dir_block_count);
-                fprintf(stdout, "%s: Disk usage rate %.2f%%\n", entry_path,
-                        ((float) (dir_size * 100) / (float) (dir_block_count * BLOCK_SIZE)));
+                // If false, inode has been visited by another link and file info has already been processed.
+                bool flag = true;
+
+                // Array contains visited inodes numbers.
+                for (int i = 0; i < vst_ind_len; i++)
+                {
+                    if (visited_inodes[i] == dir_entry_info.st_ino)
+                    {
+                        flag = false;
+                    }
+                }
+
+                // The directory is visited by the first time.
+                if (flag)
+                {
+                    if ((visited_inodes = (ino_t *) realloc(visited_inodes, (vst_ind_len + 1) * sizeof(ino_t))) == NULL)
+                    {
+                        save_error_to_log(err_log, program_name, entry_path, strerror(errno));
+                    }
+                    else
+                    {
+                        // Note that the file was processed.
+                        visited_inodes[vst_ind_len] = dir_entry_info.st_ino;
+                        vst_ind_len++;
+
+                        long long dir_block_count = 0;    // Number of blocks in the directory.
+                        long long dir_size = 0;           // Size in bytes of the directory.
+
+                        // Recursively calculate for each entry of the directory.
+                        calc_dir_size(entry_path, program_name, root_dir_stat, &dir_block_count,
+                                      &dir_size, err_log, BLOCK_SIZE);
+
+                        if (dir_block_count != 0)
+                        {
+                            (*size_pointer) += dir_size;
+                            (*block_count_pointer += dir_block_count);
+                            fprintf(stdout, "%s: Disk usage rate %.2f%%\n", entry_path,
+                                    ((float) (dir_size * 100) / (float) (dir_block_count * BLOCK_SIZE)));
+                        }
+                        else
+                        {
+                            fprintf(stdout, "%s: Empty directory\n", entry_path);
+                        }
+                    }
+
+                }
             }
             else
             {
-                fprintf(stdout, "%s: Empty directory\n", entry_path);
+                long long dir_block_count = 0;    // Number of blocks in the directory.
+                long long dir_size = 0;           // Size in bytes of the directory.
+
+                // Recursively calculate for each entry of the directory.
+                calc_dir_size(entry_path, program_name, root_dir_stat, &dir_block_count,
+                              &dir_size, err_log, BLOCK_SIZE);
+
+                if (dir_block_count != 0)
+                {
+                    (*size_pointer) += dir_size;
+                    (*block_count_pointer += dir_block_count);
+                    fprintf(stdout, "%s: Disk usage rate %.2f%%\n", entry_path,
+                            ((float) (dir_size * 100) / (float) (dir_block_count * BLOCK_SIZE)));
+                }
+                else
+                {
+                    fprintf(stdout, "%s: Empty directory\n", entry_path);
+                }
             }
 
             continue;
         }
 
         // The file is a regular file.
-        if (S_ISREG(dir_entry_info.st_mode))
+        if (S_ISREG(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
             {
             // Multiple hard links
             if ((int) dir_entry_info.st_nlink > 1)
@@ -150,7 +208,8 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
                 bool flag = true;
 
                 // Array contains visited inodes numbers.
-                for (int i = 0; i < (*vst_ind_len_pointer); i++)
+                int i = 0;
+                for (i = 0; i < vst_ind_len; i++)
                 {
                     if (visited_inodes[i] == dir_entry_info.st_ino)
                     {
@@ -162,15 +221,15 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
                 // The file is visited by the first time.
                 if (flag)
                 {
-                    if ((visited_inodes = (ino_t *) realloc(visited_inodes, ((*vst_ind_len_pointer) + 1) * sizeof(ino_t))) == NULL)
+                    if ((visited_inodes = (ino_t *) realloc(visited_inodes, (vst_ind_len + 1) * sizeof(ino_t))) == NULL)
                     {
                         save_error_to_log(err_log, program_name, entry_path, strerror(errno));
                     }
                     else
                     {
                         // Note that the file was processed.
-                        visited_inodes[(*vst_ind_len_pointer)] = dir_entry_info.st_ino;
-                        (*vst_ind_len_pointer)++;
+                        visited_inodes[vst_ind_len] = dir_entry_info.st_ino;
+                        vst_ind_len++;
 
                         // Process the file.
                         (*size_pointer) += (long long) dir_entry_info.st_size;
@@ -189,8 +248,8 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
             continue;
         }
 
-        // The file is a symbolic link.
-        if (S_ISLNK(dir_entry_info.st_mode))
+        // The file is a symlolic link.
+        if (S_ISLNK(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
         {
             char link[PATH_MAX + 1];
 
@@ -215,7 +274,6 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
                 }
             }
         }
-
     }
 
     if (closedir(dir_pointer) == -1)
