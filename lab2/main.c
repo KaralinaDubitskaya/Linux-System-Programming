@@ -32,9 +32,9 @@ int main(int argc, char *argv[])
     }
 
     // Check input.
-    if (argc != 2)
+    if (argc != 3)
     {
-        save_error_to_log(err_log, program_name, "Wrong number of parameters. Usage", "./lab2.exe \"path_name\"");
+        save_error_to_log(err_log, program_name, "Wrong number of parameters. Usage", "./lab2.exe \"path_name\" \"max_num_of_processes\"");
         print_error_log(err_log);
         return 1;
     }
@@ -248,7 +248,7 @@ int calc_dir_size(char *dir_name, char *program_name, struct stat root_dir_stat,
             continue;
         }
 
-        // The file is a symlolic link.
+        // The file is a symbolic link.
         if (S_ISLNK(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
         {
             char link[PATH_MAX + 1];

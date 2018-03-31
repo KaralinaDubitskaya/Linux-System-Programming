@@ -1,0 +1,42 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/karolina/651001/Dubitskaya/Linux-System-Programming/lab3/main.c
+stdio.h
+-
+stdlib.h
+-
+libgen.h
+-
+dirent.h
+-
+unistd.h
+-
+string.h
+-
+errno.h
+-
+fcntl.h
+-
+ctype.h
+-
+locale.h
+-
+wchar.h
+-
+wctype.h
+-
+sys/stat.h
+-
+sys/types.h
+-
+stdbool.h
+-
+x86_64-linux-gnu/sys/wait.h
+-
+
