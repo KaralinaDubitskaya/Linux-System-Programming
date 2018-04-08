@@ -35,6 +35,7 @@ bits_periods *get_periods_of_string(char *str);
 bits_periods *count_periods(FILE *file);
 int get_bit(char value, char position);
 void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd *periods_of_1, int num_of_periods_0, int num_of_periods_1);
+void sort(prd *a, int n);
 void print_error(const char *path, const char *error_message);
 
 // The basename of the program
@@ -415,6 +416,9 @@ bits_periods *get_periods_of_string(char *str)
 
 void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd *periods_of_1, int num_of_periods_0, int num_of_periods_1)
 {
+    sort(periods_of_0, num_of_periods_0);
+    sort(periods_of_1, num_of_periods_1);
+
     printf("%d %s %d 0: ", pid, path, num_of_bytes);
 
     for (int i = 0; i < num_of_periods_0; i++)
@@ -430,6 +434,31 @@ void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd 
     }
 
     printf("\n");
+}
+
+
+void sort(prd *a, int n)
+{
+    int j, nn;
+
+    do {
+        nn = 0;
+        for (j = 1; j < n; ++j)
+            if (a[j-1].len > a[j].len)
+            {
+                prd temp;
+                temp.len = a[j-1].len;
+                temp.num = a[j-1].num;
+
+                a[j-1].len = a[j].len;
+                a[j-1].num = a[j].num;
+
+                a[j].len = temp.len;
+                a[j].num = temp.num;
+                nn = j;
+            }
+        n = nn;
+    } while (n);
 }
 
 
