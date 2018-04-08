@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <libgen.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <string.h>
@@ -10,6 +9,7 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <x86_64-linux-gnu/sys/wait.h>
+#include <libgen.h>
 
 #define BUFFER_SIZE (16 * 1024)
 
@@ -40,9 +40,9 @@ void print_error(const char *path, const char *error_message);
 // The basename of the program
 char *program_name;
 // Number of concurrent processes.
-char num_of_processes;
+unsigned char num_of_processes;
 // The max number of concurrent processes.
-char max_num_of_processes;
+unsigned char max_num_of_processes;
 
 ino_t *visited_inodes = NULL; // Array contains inodes of visited files.
 int vst_ind_len = 0;          // Length of the array of visited inodes (the previous line).
@@ -70,6 +70,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+
     // Get stat structure, which contains info about directory, entered by user.
     // If pathname (argv[1]) is a symbolic link, then it returns information
     // about the link itself, not the file that it refers to.
@@ -81,7 +82,7 @@ int main(int argc, char *argv[])
     }
 
     // The number of concurrent processes should not exceed max_num_of_processes.
-    max_num_of_processes = (char)strtol(argv[2], NULL, 10);
+    max_num_of_processes = (unsigned char)strtol(argv[2], NULL, 10);
 
     // TODO why 1?
     if (max_num_of_processes < 2)
@@ -89,6 +90,7 @@ int main(int argc, char *argv[])
         print_error(argv[1], "Wrong max number of processes.");
         return 1;
     }
+
 
     //todo Number of concurrent processes.
     num_of_processes = 1;
@@ -311,7 +313,7 @@ bits_periods *get_periods_of_string(char *str)
             else if ((curr_bit == 1) && (prev_bit == 0))
             {
                 bool flag = true;
-                for (int j = 0; j < num_of_periods_of_0; j++)
+                for (int j = 0; (j < num_of_periods_of_0) && flag; j++)
                 {
                     if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
                     {
@@ -334,7 +336,7 @@ bits_periods *get_periods_of_string(char *str)
             else if ((curr_bit == 0) && (prev_bit == 1))
             {
                 bool flag = true;
-                for (int j = 0; j < num_of_periods_of_1; j++)
+                for (int j = 0; (j < num_of_periods_of_1) && flag; j++)
                 {
                     if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
                     {
@@ -361,7 +363,7 @@ bits_periods *get_periods_of_string(char *str)
     if (curr_bit == 0)
     {
         bool flag = true;
-        for (int j = 0; j < num_of_periods_of_0; j++)
+        for (int j = 0; (j < num_of_periods_of_0) && flag; j++)
         {
             if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
             {
@@ -382,7 +384,7 @@ bits_periods *get_periods_of_string(char *str)
 
     if (curr_bit == 1) {
         bool flag = true;
-        for (int j = 0; j < num_of_periods_of_1; j++)
+        for (int j = 0; (j < num_of_periods_of_1) && flag; j++)
         {
             if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
             {
@@ -413,7 +415,7 @@ bits_periods *get_periods_of_string(char *str)
 
 void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd *periods_of_1, int num_of_periods_0, int num_of_periods_1)
 {
-    printf("%d %s %d 0:", pid, path, num_of_bytes);
+    printf("%d %s %d 0: ", pid, path, num_of_bytes);
 
     for (int i = 0; i < num_of_periods_0; i++)
     {
@@ -505,7 +507,7 @@ bits_periods *count_periods(FILE *file)
             else if ((curr_bit == 1) && (prev_bit == 0))
             {
                 bool flag = true;
-                for (int j = 0; j < num_of_periods_of_0; j++)
+                for (int j = 0; (j < num_of_periods_of_0) && flag; j++)
                 {
                     if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
                     {
@@ -528,7 +530,7 @@ bits_periods *count_periods(FILE *file)
             else if ((curr_bit == 0) && (prev_bit == 1))
             {
                 bool flag = true;
-                for (int j = 0; j < num_of_periods_of_1; j++)
+                for (int j = 0; (j < num_of_periods_of_1) && flag; j++)
                 {
                     if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
                     {
@@ -555,7 +557,7 @@ bits_periods *count_periods(FILE *file)
     if (curr_bit == 0)
     {
         bool flag = true;
-        for (int j = 0; j < num_of_periods_of_0; j++)
+        for (int j = 0; (j < num_of_periods_of_0) && flag; j++)
         {
             if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
             {
@@ -576,7 +578,7 @@ bits_periods *count_periods(FILE *file)
 
     if (curr_bit == 1) {
         bool flag = true;
-        for (int j = 0; j < num_of_periods_of_1; j++)
+        for (int j = 0; (j < num_of_periods_of_1) && flag; j++)
         {
             if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
             {
@@ -622,5 +624,5 @@ int get_bit(const char value, const char position)
 // Print  error message to stream stderr
 void print_error(const char *path, const char *error_message)
 {
-    fprintf(stderr, "\n%s: %s %s\n\n", program_name, path, error_message);
+    fprintf(stderr, "%s: %s %s\n", program_name, path, error_message);
 }
