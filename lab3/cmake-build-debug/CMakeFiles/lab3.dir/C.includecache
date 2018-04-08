@@ -23,17 +23,9 @@ errno.h
 -
 fcntl.h
 -
-ctype.h
--
-locale.h
--
 wchar.h
 -
-wctype.h
--
 sys/stat.h
--
-sys/types.h
 -
 stdbool.h
 -

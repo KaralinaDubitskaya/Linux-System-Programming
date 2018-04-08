@@ -6,58 +6,36 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <ctype.h>
-#include <locale.h>
 #include <wchar.h>
-
-#include <wctype.h>
-
 #include <sys/stat.h>
-#include <sys/types.h>
-
 #include <stdbool.h>
-
-
-
 #include <x86_64-linux-gnu/sys/wait.h>
 
-#define ARGS_COUNT 3
 #define BUFFER_SIZE (16 * 1024)
 
-
-//char *prog_name;
-//int max_working_processes_amount;
-//int working_processes_amount;
-
-//void print_error(char *prog_name, char *error_message, char *error_file)
-//{
-//    fprintf(stderr, "\n%s: %s %s\n", prog_name, error_message, error_file ? error_file : "");
-//}
-//
-
-
-
-
-
-
-
+typedef struct
+{
+    unsigned long len;
+    unsigned long num;
+} prd;
 
 // The structure contains info about periods of 0's and 1's of the file's bits.
 typedef struct
 {
     int num_of_bytes;
-    int *periods_of_0;
-    int *periods_of_1;
+    prd *periods_of_0;
+    prd *periods_of_1;
     int num_of_periods_of_0;
     int num_of_periods_of_1;
 } bits_periods;
 
-int count_periods_of_bits(char *dir_name);
+int count_periods_of_bits(char *dir_name, struct stat root_dir_stat);
 bits_periods *get_periods(char *file_name);
+bits_periods *get_periods_of_string(char *str);
 bits_periods *count_periods(FILE *file);
 int get_bit(char value, char position);
-void print_result(int pid, char *full_path, int bytes_amount, int *array0, int *array1, int size0, int size1);
-void print_error(const char *error_message);
+void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd *periods_of_1, int num_of_periods_0, int num_of_periods_1);
+void print_error(const char *path, const char *error_message);
 
 // The basename of the program
 char *program_name;
@@ -65,6 +43,9 @@ char *program_name;
 char num_of_processes;
 // The max number of concurrent processes.
 char max_num_of_processes;
+
+ino_t *visited_inodes = NULL; // Array contains inodes of visited files.
+int vst_ind_len = 0;          // Length of the array of visited inodes (the previous line).
 
 int main(int argc, char *argv[])
 {
@@ -74,7 +55,7 @@ int main(int argc, char *argv[])
     // Check input.
     if (argc != 3)
     {
-        print_error("Wrong number of parameters. Usage: $./lab3.exe \"path_name\" \"max_num_of_processes\"");
+        print_error("Wrong number of parameters. Usage:", "$./lab3.exe \"path_name\" \"max_num_of_processes\"");
         return 1;
     }
 
@@ -85,10 +66,17 @@ int main(int argc, char *argv[])
 
     if (path == NULL)
     {
-        char *error_msg = "";
-        strcpy(error_msg, "Can't open file ");
-        error_msg = strcat(error_msg, argv[1]);
-        print_error(error_msg);
+        print_error(argv[1], "Can't open file ");
+        return 1;
+    }
+
+    // Get stat structure, which contains info about directory, entered by user.
+    // If pathname (argv[1]) is a symbolic link, then it returns information
+    // about the link itself, not the file that it refers to.
+    struct stat root_dir_stat;
+    if (lstat(argv[1], &root_dir_stat) == -1)
+    {
+        print_error(argv[1], strerror(errno));
         return 1;
     }
 
@@ -98,14 +86,14 @@ int main(int argc, char *argv[])
     // TODO why 1?
     if (max_num_of_processes < 2)
     {
-        print_error("Wrong max number of processes.");
+        print_error(argv[1], "Wrong max number of processes.");
         return 1;
     }
 
     //todo Number of concurrent processes.
     num_of_processes = 1;
 
-    count_periods_of_bits(path);
+    count_periods_of_bits(path, root_dir_stat);
 
 //todo ?
     while (wait(NULL) > 0) {}
@@ -114,7 +102,7 @@ int main(int argc, char *argv[])
 }
 
 //todo comment
-int count_periods_of_bits(char *dir_name)
+int count_periods_of_bits(char *dir_name, struct stat root_dir_stat)
 {
     DIR *dir_pointer = NULL;
     struct dirent *dir_entry;
@@ -122,10 +110,7 @@ int count_periods_of_bits(char *dir_name)
     dir_pointer = opendir(dir_name);
     if (dir_pointer == NULL)
     {
-        char *error_msg = "";
-        strcpy(error_msg, dir_name);
-        error_msg = strcat(error_msg, strerror(errno));
-        print_error(error_msg);
+        print_error(dir_name, strerror(errno));
         return 1;
     }
 
@@ -150,22 +135,60 @@ int count_periods_of_bits(char *dir_name)
 
         // Contains main info about the entry.
         struct stat dir_entry_info;
-        if (lstat(entry_path, &dir_entry_info)) {
-            char *error_msg = "";
-            strcpy(error_msg, entry_path);
-            error_msg = strcat(error_msg, strerror(errno));
-            print_error(error_msg);
+        if (lstat(entry_path, &dir_entry_info))
+        {
+            print_error(entry_path, strerror(errno));
             continue;
         }
 
         // The file is a directory.
-        if (S_ISDIR(dir_entry_info.st_mode))
+        if (S_ISDIR(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
         {
-            count_periods_of_bits(dir_name);
+            // Multiple hard links
+            if ((int) dir_entry_info.st_nlink > 1)
+            {
+                // If false, inode has been visited by another link and file info has already been processed.
+                bool flag = true;
+
+                // Array contains visited inodes numbers.
+                for (int i = 0; i < vst_ind_len; i++)
+                {
+                    if (visited_inodes[i] == dir_entry_info.st_ino)
+                    {
+                        flag = false;
+                    }
+                }
+
+                // The directory is visited by the first time.
+                if (flag)
+                {
+                    if ((visited_inodes = (ino_t *) realloc(visited_inodes, (vst_ind_len + 1) * sizeof(ino_t))) == NULL)
+                    {
+                        print_error(entry_path, strerror(errno));
+                    }
+                    else
+                    {
+                        // Note that the file was processed.
+                        visited_inodes[vst_ind_len] = dir_entry_info.st_ino;
+                        vst_ind_len++;
+
+                        // Recursively calculate for each entry of the directory.
+                        count_periods_of_bits(entry_path, root_dir_stat);
+                    }
+
+                }
+            }
+            else
+            {
+                // Recursively calculate for each entry of the directory.
+                count_periods_of_bits(entry_path, root_dir_stat);
+            }
+            continue;
+
         }
 
         // The file is a regular file.
-        if (S_ISREG(dir_entry_info.st_mode))
+        if (S_ISREG(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
         {
             // Waiting for the child process to complete.
             if (num_of_processes >= max_num_of_processes)
@@ -183,51 +206,225 @@ int count_periods_of_bits(char *dir_name)
                 periods = get_periods(entry_path);
                 if (periods != NULL)
                 {
-                    print_result(getpid(), entry_path, periods->num_of_bytes, periods->periods_of_0, periods->periods_of_1, periods->num_of_periods_of_0, periods->num_of_periods_of_1);
+                    print_result(getpid(), entry_path, periods->num_of_bytes, periods->periods_of_0,
+                                 periods->periods_of_1, periods->num_of_periods_of_0, periods->num_of_periods_of_1);
+                    if (periods->periods_of_1 != NULL)
+                        free(periods->periods_of_1);
+                    if (periods->periods_of_0 != NULL)
+                        free(periods->periods_of_0);
+                    free(periods);
                     exit(0);
                 }
                 exit(1);
             }
             else if (pid < 0)
             {
-                char *error_msg = "";
-                strcpy(error_msg, dir_name);
-                error_msg = strcat(error_msg, strerror(errno));
-                print_error(error_msg);
+                print_error(dir_name, strerror(errno));
                 exit(1);
             }
 
             num_of_processes++;
         }
 
+        // The file is a symbolic link.
+        if (S_ISLNK(dir_entry_info.st_mode) && (dir_entry_info.st_dev == root_dir_stat.st_dev))
+        {
+            char link[PATH_MAX + 1];
 
+            if (readlink(entry_path, link, PATH_MAX) == -1)
+            {
+                print_error(entry_path, strerror(errno));
+            }
+            else
+            {
+                // Waiting for the child process to complete.
+                if (num_of_processes >= max_num_of_processes)
+                {
+                    wait(NULL);
+                    num_of_processes--;
+                }
+
+                pid_t pid = fork();
+
+                // Child Process
+                if (pid == 0)
+                {
+                    bits_periods *periods;
+                    periods = get_periods_of_string(link);
+                    if (periods != NULL)
+                    {
+                        print_result(getpid(), entry_path, periods->num_of_bytes, periods->periods_of_0, periods->periods_of_1, periods->num_of_periods_of_0, periods->num_of_periods_of_1);
+                        free(periods);
+                        exit(0);
+                    }
+                    exit(1);
+                }
+                else if (pid < 0)
+                {
+                    print_error(dir_name, strerror(errno));
+                    exit(1);
+                }
+
+                num_of_processes++;
+            }
+        }
+        free(entry_path);
     }
 
     if (closedir(dir_pointer) == -1)
     {
-        char *error_msg = "";
-        strcpy(error_msg, dir_name);
-        error_msg = strcat(error_msg, strerror(errno));
-        print_error(error_msg);
+        print_error(dir_name, strerror(errno));
     }
 
     return 0;
 }
 
-void print_result(int pid, char *path, int num_of_bytes, int *periods_of_0, int *periods_of_1, int num_of_periods_0, int num_of_periods_1)
+bits_periods *get_periods_of_string(char *str)
+{
+    int curr_bit = -1;
+    int prev_bit;
+    unsigned long period = 1;
+
+    prd *periods_of_0 = NULL;
+    prd *periods_of_1 = NULL;
+    int num_of_periods_of_0 = 0;
+    int num_of_periods_of_1 = 0;
+
+    char ch;
+    int len = (int)strlen(str);
+    for (int i = 0; i < len; i++)
+    {
+        ch = str[i];
+        for (char position = 7; position >= 0; position--)
+        {
+            prev_bit = curr_bit;
+            curr_bit = get_bit(ch, position);
+
+            if ((curr_bit == 0) && (prev_bit == 0))
+            {
+                period++;
+            }
+            else if ((curr_bit == 1) && (prev_bit == 1))
+            {
+                period++;
+            }
+            else if ((curr_bit == 1) && (prev_bit == 0))
+            {
+                bool flag = true;
+                for (int j = 0; j < num_of_periods_of_0; j++)
+                {
+                    if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
+                    {
+                        periods_of_0[j].num++;
+                        period = 1;
+                        flag = false;
+                    }
+                }
+
+                if (flag)
+                {
+                    num_of_periods_of_0++;
+                    periods_of_0 =
+                        (prd *)realloc(periods_of_0, num_of_periods_of_0 * sizeof(prd));
+                    periods_of_0[num_of_periods_of_0 - 1].len = period;
+                    periods_of_0[num_of_periods_of_0 - 1].num = 1;
+                    period = 1;
+                }
+            }
+            else if ((curr_bit == 0) && (prev_bit == 1))
+            {
+                bool flag = true;
+                for (int j = 0; j < num_of_periods_of_1; j++)
+                {
+                    if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
+                    {
+                        periods_of_1[j].num++;
+                        period = 1;
+                        flag = false;
+                    }
+                }
+
+                if (flag)
+                {
+                    num_of_periods_of_1++;
+                    periods_of_1 =
+                            (prd *)realloc(periods_of_1, num_of_periods_of_1 * sizeof(prd));
+                    periods_of_1[num_of_periods_of_1 - 1].len = period;
+                    periods_of_1[num_of_periods_of_1 - 1].num = 1;
+                    period = 1;
+                }
+
+            }
+        }
+    }
+
+    if (curr_bit == 0)
+    {
+        bool flag = true;
+        for (int j = 0; j < num_of_periods_of_0; j++)
+        {
+            if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
+            {
+                periods_of_0[j].num++;
+                flag = false;
+            }
+        }
+
+        if (flag)
+        {
+            num_of_periods_of_0++;
+            periods_of_0 =
+                    (prd *)realloc(periods_of_0, num_of_periods_of_0 * sizeof(prd));
+            periods_of_0[num_of_periods_of_0 - 1].len = period;
+            periods_of_0[num_of_periods_of_0 - 1].num = 1;
+        }
+    }
+
+    if (curr_bit == 1) {
+        bool flag = true;
+        for (int j = 0; j < num_of_periods_of_1; j++)
+        {
+            if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
+            {
+                periods_of_1[j].num++;
+                flag = false;
+            }
+        }
+
+        if (flag)
+        {
+            num_of_periods_of_1++;
+            periods_of_1 =
+                    (prd *)realloc(periods_of_1, num_of_periods_of_1 * sizeof(prd));
+            periods_of_1[num_of_periods_of_1 - 1].len = period;
+            periods_of_1[num_of_periods_of_1 - 1].num = 1;
+        }
+    }
+
+    bits_periods *periods = malloc(sizeof(bits_periods));
+    periods->num_of_bytes = len;
+    periods->periods_of_0 = periods_of_0;
+    periods->periods_of_1 = periods_of_1;
+    periods->num_of_periods_of_0 = num_of_periods_of_0;
+    periods->num_of_periods_of_1 = num_of_periods_of_1;
+
+    return periods;
+}
+
+void print_result(int pid, char *path, int num_of_bytes, prd *periods_of_0, prd *periods_of_1, int num_of_periods_0, int num_of_periods_1)
 {
     printf("%d %s %d 0:", pid, path, num_of_bytes);
 
     for (int i = 0; i < num_of_periods_0; i++)
     {
-        printf("%d ", periods_of_0[i]);
+        printf("%lu=%lu ", periods_of_0[i].len, periods_of_0[i].num);
     }
 
     printf("1: ");
 
     for (int i = 0; i < num_of_periods_1; i++)
     {
-        printf("%d ", periods_of_1[i]);
+        printf("%lu=%lu ", periods_of_1[i].len, periods_of_1[i].num);
     }
 
     printf("\n");
@@ -243,10 +440,7 @@ bits_periods *get_periods(char *file_name)
 
     if (fd == -1)
     {
-        char *error_msg = "";
-        strcpy(error_msg, file_name);
-        error_msg = strcat(error_msg, strerror(errno));
-        print_error(error_msg);
+        print_error(file_name, strerror(errno));
         return NULL;
     }
 
@@ -259,10 +453,7 @@ bits_periods *get_periods(char *file_name)
 
     if (bytes_read < 0)
     {
-        char *error_msg = "";
-        strcpy(error_msg, file_name);
-        error_msg = strcat(error_msg, strerror(errno));
-        print_error(error_msg);
+        print_error(file_name, strerror(errno));
         return NULL;
     }
 
@@ -274,11 +465,9 @@ bits_periods *get_periods(char *file_name)
     periods->num_of_bytes = num_of_bytes;
 
 
-    if (fclose(file_ptr) == -1) {
-        char *error_msg = "";
-        strcpy(error_msg, file_name);
-        error_msg = strcat(error_msg, strerror(errno));
-        print_error(error_msg);
+    if (fclose(file_ptr) == -1)
+    {
+        print_error(file_name, strerror(errno));
         return NULL;
     }
 
@@ -290,10 +479,10 @@ bits_periods *count_periods(FILE *file)
 {
     int curr_bit = -1;
     int prev_bit;
-    int period = 1;
+    unsigned long period = 1;
 
-    int *periods_of_0 = NULL;
-    int *periods_of_1 = NULL;
+    prd *periods_of_0 = NULL;
+    prd *periods_of_1 = NULL;
     int num_of_periods_of_0 = 0;
     int num_of_periods_of_1 = 0;
 
@@ -315,21 +504,94 @@ bits_periods *count_periods(FILE *file)
             }
             else if ((curr_bit == 1) && (prev_bit == 0))
             {
-                num_of_periods_of_0++;
-                periods_of_0 =
-                        (int *)realloc(periods_of_0, num_of_periods_of_0 * sizeof(int));
-                periods_of_0[num_of_periods_of_0 - 1] = period;
-                period = 1;
+                bool flag = true;
+                for (int j = 0; j < num_of_periods_of_0; j++)
+                {
+                    if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
+                    {
+                        periods_of_0[j].num++;
+                        period = 1;
+                        flag = false;
+                    }
+                }
+
+                if (flag)
+                {
+                    num_of_periods_of_0++;
+                    periods_of_0 =
+                            (prd *)realloc(periods_of_0, num_of_periods_of_0 * sizeof(prd));
+                    periods_of_0[num_of_periods_of_0 - 1].len = period;
+                    periods_of_0[num_of_periods_of_0 - 1].num = 1;
+                    period = 1;
+                }
             }
             else if ((curr_bit == 0) && (prev_bit == 1))
             {
-                num_of_periods_of_1++;
-                periods_of_1 =
-                        (int *)realloc(periods_of_1, num_of_periods_of_1 * sizeof(int));
-                periods_of_1[num_of_periods_of_1 - 1] = period;
-                period = 1;
+                bool flag = true;
+                for (int j = 0; j < num_of_periods_of_1; j++)
+                {
+                    if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
+                    {
+                        periods_of_1[j].num++;
+                        period = 1;
+                        flag = false;
+                    }
+                }
+
+                if (flag)
+                {
+                    num_of_periods_of_1++;
+                    periods_of_1 =
+                            (prd *)realloc(periods_of_1, num_of_periods_of_1 * sizeof(prd));
+                    periods_of_1[num_of_periods_of_1 - 1].len = period;
+                    periods_of_1[num_of_periods_of_1 - 1].num = 1;
+                    period = 1;
+                }
 
             }
+        }
+    }
+
+    if (curr_bit == 0)
+    {
+        bool flag = true;
+        for (int j = 0; j < num_of_periods_of_0; j++)
+        {
+            if ((periods_of_0 != NULL) && (periods_of_0[j].len == period))
+            {
+                periods_of_0[j].num++;
+                flag = false;
+            }
+        }
+
+        if (flag)
+        {
+            num_of_periods_of_0++;
+            periods_of_0 =
+                    (prd *)realloc(periods_of_0, num_of_periods_of_0 * sizeof(prd));
+            periods_of_0[num_of_periods_of_0 - 1].len = period;
+            periods_of_0[num_of_periods_of_0 - 1].num = 1;
+        }
+    }
+
+    if (curr_bit == 1) {
+        bool flag = true;
+        for (int j = 0; j < num_of_periods_of_1; j++)
+        {
+            if ((periods_of_1 != NULL) && (periods_of_1[j].len == period))
+            {
+                periods_of_1[j].num++;
+                flag = false;
+            }
+        }
+
+        if (flag)
+        {
+            num_of_periods_of_1++;
+            periods_of_1 =
+                    (prd *)realloc(periods_of_1, num_of_periods_of_1 * sizeof(prd));
+            periods_of_1[num_of_periods_of_1 - 1].len = period;
+            periods_of_1[num_of_periods_of_1 - 1].num = 1;
         }
     }
 
@@ -358,7 +620,7 @@ int get_bit(const char value, const char position)
 
 
 // Print  error message to stream stderr
-void print_error(const char *error_message)
+void print_error(const char *path, const char *error_message)
 {
-    fprintf(stderr, "%s: %s\n", program_name, error_message);
+    fprintf(stderr, "\n%s: %s %s\n\n", program_name, path, error_message);
 }
