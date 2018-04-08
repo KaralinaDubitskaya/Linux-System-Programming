@@ -11,15 +11,17 @@
 #include <x86_64-linux-gnu/sys/wait.h>
 #include <libgen.h>
 
+// Buffer for reading files.
 #define BUFFER_SIZE (16 * 1024)
 
+// Info about periods of bits.
 typedef struct
 {
-    unsigned long len;
-    unsigned long num;
+    unsigned long len; // Number of bits
+    unsigned long num; // Number of periods of size [len]
 } prd;
 
-// The structure contains info about periods of 0's and 1's of the file's bits.
+// Info about periods of 0's and 1's of the file's bits.
 typedef struct
 {
     int num_of_bytes;
@@ -85,26 +87,26 @@ int main(int argc, char *argv[])
     // The number of concurrent processes should not exceed max_num_of_processes.
     max_num_of_processes = (unsigned char)strtol(argv[2], NULL, 10);
 
-    // TODO why 1?
+    // Parent and 1..254 child processes
     if (max_num_of_processes < 2)
     {
         print_error(argv[1], "Wrong max number of processes.");
         return 1;
     }
 
-
-    //todo Number of concurrent processes.
+    // Number of concurrent processes.
     num_of_processes = 1;
 
+    // Recursively count periods of bits for all files of the directory.
     count_periods_of_bits(path, root_dir_stat);
 
-//todo ?
+    // Wait all child processes
     while (wait(NULL) > 0) {}
 
     return 0;
 }
 
-//todo comment
+// Recursively count periods of bits for all files of the directory.
 int count_periods_of_bits(char *dir_name, struct stat root_dir_stat)
 {
     DIR *dir_pointer = NULL;
