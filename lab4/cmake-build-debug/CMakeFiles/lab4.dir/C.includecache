@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/karolina/651001/Dubitskaya/Linux-System-Programming/lab4/main.c
+stdio.h
+-
+math.h
+-
+time.h
+-
+stdlib.h
+-
+dirent.h
+-
+string.h
+-
+sys/stat.h
+-
+libgen.h
+-
+unistd.h
+-
+malloc.h
+-
+signal.h
+-
+sys/time.h
+-
+sys/types.h
+-
+sys/wait.h
+-
+errno.h
+-
+

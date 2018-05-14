@@ -1,0 +1,3 @@
+/home/karolina/651001/Dubitskaya/Linux-System-Programming/lab4/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/karolina/651001/Dubitskaya/Linux-System-Programming/lab4/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/karolina/651001/Dubitskaya/Linux-System-Programming/lab4/cmake-build-debug/CMakeFiles/lab4.dir
