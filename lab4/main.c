@@ -14,10 +14,9 @@
 #include <sys/wait.h>
 #include <errno.h>
 
-#define NUM_OF_PROCESSSES 9
 #define MAX_SIGNAL_COUNT 101
 
-void proc0_handler(int sig);
+void proc0_handler();
 void proc1_handler(int sig);
 void proc2_handler(int sig);
 void proc3_handler(int sig);
@@ -34,12 +33,6 @@ long get_time();
 void print_action_details(uint proc_num, pid_t pid, pid_t ppid, const char *event, long time);
 void print_error(int pid, const char *error_message);
 
-/*
-	Var 7 : 1->2   2->(3,4)   4->5    3->6  6->7  7->8
-	Var 11 : 1->(8,7) SIGUSR1   8->(6,5) SIGUSR1  5->(4,3,2) SIGUSR2   2->1 SIGUSR2
-*/
-
-// todo comment
 int sig_count = 0;
 int sigusr1_count = 0, sigusr2_count = 0;
 
@@ -49,7 +42,7 @@ char *program_name;
 // Number of processes at the moment
 char proc_count;
 
-// todo comment
+// Used to change signals handlers
 struct sigaction sig_action;
 
 int main(int argc, char *argv[]) {
@@ -109,11 +102,11 @@ int main(int argc, char *argv[]) {
 
                     // Set handlers
                     sig_action.sa_handler = &proc2_handler;
-                    if (sigaction(SIGUSR1, &sig_action, 0) == -1) {
+                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
                         print_error(getpid(), strerror(errno));
                         exit(1);
                     }
-                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                    if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                         print_error(getpid(), strerror(errno));
                         exit(1);
                     }
@@ -150,11 +143,11 @@ int main(int argc, char *argv[]) {
 
                             // Set handlers
                             sig_action.sa_handler = &proc3_handler;
-                            if (sigaction(SIGUSR1, &sig_action, 0) == -1) {
+                            if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
                                 print_error(getpid(), strerror(errno));
                                 exit(1);
                             }
-                            if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                            if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                 print_error(getpid(), strerror(errno));
                                 exit(1);
                             }
@@ -184,11 +177,11 @@ int main(int argc, char *argv[]) {
 
                                     // Set handlers
                                     sig_action.sa_handler = &proc4_handler;
-                                    if (sigaction(SIGUSR1, &sig_action, 0) == -1) {
+                                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
                                         print_error(getpid(), strerror(errno));
                                         exit(1);
                                     }
-                                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                                    if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                         print_error(getpid(), strerror(errno));
                                         exit(1);
                                     }
@@ -222,7 +215,7 @@ int main(int argc, char *argv[]) {
                                                 print_error(getpid(), strerror(errno));
                                                 exit(1);
                                             }
-                                            if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                                            if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                                 print_error(getpid(), strerror(errno));
                                                 exit(1);
                                             }
@@ -263,7 +256,7 @@ int main(int argc, char *argv[]) {
                                                         print_error(getpid(), strerror(errno));
                                                         exit(1);
                                                     }
-                                                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                                                    if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                                         print_error(getpid(), strerror(errno));
                                                         exit(1);
                                                     }
@@ -297,7 +290,7 @@ int main(int argc, char *argv[]) {
                                                                 print_error(getpid(), strerror(errno));
                                                                 exit(1);
                                                             }
-                                                            if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                                                            if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                                                 print_error(getpid(), strerror(errno));
                                                                 exit(1);
                                                             }
@@ -331,7 +324,7 @@ int main(int argc, char *argv[]) {
                                                                         print_error(getpid(), strerror(errno));
                                                                         exit(1);
                                                                     }
-                                                                    if (sigaction(SIGUSR2, &sig_action, 0) == -1) {
+                                                                    if (sigaction(SIGTERM, &sig_action, 0) == -1) {
                                                                         print_error(getpid(), strerror(errno));
                                                                         exit(1);
                                                                     }
@@ -471,12 +464,12 @@ int get_pid_from_file(char *filename)
         exit(1);
     }
 
-    fscanf (file_ptr, "%d", &pid);
+    fscanf(file_ptr, "%d", &pid);
     fclose(file_ptr);
     return pid;
 }
 
-// todo comment
+// Return microseconds % 1000
 long get_time()
 {
     struct timeval time;
@@ -484,15 +477,13 @@ long get_time()
     return time.tv_usec % 1000;
 }
 
-// todo comment
 void print_action_details(uint proc_num, pid_t pid, pid_t ppid, const char *event, long time)
 {
     printf ("%d %d %d %s %lu\n", proc_num, pid, ppid, event, time);
     fflush(stdout);
 }
 
-// todo comment
-void proc0_handler(int sig)
+void proc0_handler()
 {
     proc_count++;
 }
@@ -501,7 +492,7 @@ void proc1_handler(int sig)
 {
     if (sig == SIGUSR1)
     {
-        // todo whaaat????
+        // Start sending signals
         print_action_details(1, getpid(), getppid(), "послал USR1", get_time());
         if (kill(-get_pid_from_file("proc7_pid.txt"), SIGUSR1) == -1) {
             print_error(getpid(), strerror(errno));
@@ -514,8 +505,6 @@ void proc1_handler(int sig)
     if (sig == SIGUSR2) {
         print_action_details(1, getpid(), getppid(), "получил USR2", get_time());
         sig_count++;
-        // todo why???
-        fflush(stdout);
         if (sig_count == MAX_SIGNAL_COUNT) {
             // Send SIGTERM to process 2
             if (kill(get_pid_from_file("proc2_pid.txt"), SIGTERM) == -1) {
@@ -675,12 +664,11 @@ void proc5_handler(int sig)
         print_action_details(5, getpid(), getppid(), "получил USR1", get_time());
 
         // Send SIGUSR2 to processes 2, 3 and 4
+        print_action_details(5, getpid(), getppid(), "послал USR2", get_time());
         if (kill(-get_pid_from_file("proc2_pid.txt"), SIGUSR2) == -1) {
             print_error(getpid(), strerror(errno));
             exit(1);
         }
-
-        print_action_details(5, getpid(), getppid(), "послал USR2", get_time());
         sigusr2_count++;
     }
 }
