@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
     struct stat root_dir_stat;
     if (lstat(argv[1], &root_dir_stat) == -1)
     {
-        print_error(argv[1], strerror(errno));
+        print_error(argv[1], c);
         return 1;
     }
 
