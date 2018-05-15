@@ -16,7 +16,7 @@
 
 #define MAX_SIGNAL_COUNT 101
 
-void proc0_handler();
+void proc0_handler(int sig);
 void proc1_handler(int sig);
 void proc2_handler(int sig);
 void proc3_handler(int sig);
@@ -400,9 +400,9 @@ int main(int argc, char *argv[]) {
                 pause(); // wait for signal
             }
 
-            char buf[256];
-            sprintf(buf, "pstree %d", getpid());
-            system(buf);
+	    char buffer[15];
+	    sprintf(buffer, "pstree %d", getpid());
+	    system(buffer);
 
             if (kill(get_pid_from_file("proc1_pid.txt"), SIGUSR1) == -1) {
                 print_error(getpid(), strerror(errno));
@@ -469,12 +469,12 @@ int get_pid_from_file(char *filename)
     return pid;
 }
 
-// Return microseconds % 1000
+// Return microseconds / 1000
 long get_time()
 {
     struct timeval time;
     gettimeofday(&time, NULL);
-    return time.tv_usec % 1000;
+    return time.tv_usec / 1000;
 }
 
 void print_action_details(uint proc_num, pid_t pid, pid_t ppid, const char *event, long time)
@@ -483,7 +483,7 @@ void print_action_details(uint proc_num, pid_t pid, pid_t ppid, const char *even
     fflush(stdout);
 }
 
-void proc0_handler()
+void proc0_handler(int sig)
 {
     proc_count++;
 }
@@ -546,7 +546,7 @@ void proc2_handler(int sig)
     if (sig == SIGTERM)
     {
         printf("2 %d %d завершил работу после %d-го сигнала SIGUSR1 и %d-го сигнала SIGUSR2\n", getpid(),
-                getppid(), sigusr1_count, sigusr2_count);
+               getppid(), sigusr1_count, sigusr2_count);
         fflush(stdout);
 
         // Remove temp file with process pid
